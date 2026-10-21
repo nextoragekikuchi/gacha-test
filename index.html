@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body>
+  <h1>ガチャ テスト</h1>
+  <pre id="log">読み込み中...</pre>
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <script>
+    liff.init({ liffId: "2012132198-SbUNYmJT" })
+      .then(() => {
+        if (!liff.isLoggedIn()) { liff.login(); return; }
+        document.getElementById("log").textContent =
+          "LIFF初期化OK\nIDトークンあり: " + !!liff.getIDToken();
+      })
+      .catch(e => { document.getElementById("log").textContent = "エラー: " + e; });
+  </script>
+</body>
+</html>
