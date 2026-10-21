@@ -28,7 +28,7 @@ h1{margin:0; font-size:34px; line-height:1.15; font-style:italic; font-weight:90
 /* lens + shutter */
 .lens{position:relative; width:min(78vw,300px); aspect-ratio:1; margin:8px auto 18px}
 .lens[data-r=SSR]{--rc:#ffc83d} .lens[data-r=SR]{--rc:#b57bff} .lens[data-r=R]{--rc:#3ec6ff} .lens[data-r=N]{--rc:#c9d6e3}
-.rays{position:absolute; inset:-34%; opacity:0; border-radius:50%;
+.rays{position:absolute; inset:-34%; opacity:0; border-radius:50%; pointer-events:none;
   background:repeating-conic-gradient(var(--rc) 0 5deg,transparent 5deg 20deg);
   -webkit-mask-image:radial-gradient(circle,#000 18%,transparent 62%); mask-image:radial-gradient(circle,#000 18%,transparent 62%)}
 .lens.charge .rays{opacity:.5; animation:turn 6s linear infinite; transition:opacity .6s}
@@ -45,7 +45,7 @@ h1{margin:0; font-size:34px; line-height:1.15; font-style:italic; font-weight:90
 @keyframes charge{0%{transform:rotate(0)} 100%{transform:rotate(300deg)}}
 @keyframes pulse{from{opacity:.4} to{opacity:1}}
 
-.spin{width:100%; padding:17px; border:0; border-radius:16px; background:linear-gradient(#ffe27a,var(--gold)); color:var(--ink);
+.spin{position:relative; z-index:2; width:100%; padding:17px; border:0; border-radius:16px; background:linear-gradient(#ffe27a,var(--gold)); color:var(--ink);
   font-size:22px; font-weight:900; letter-spacing:.06em; box-shadow:0 6px 0 #c98f00,0 10px 18px rgba(0,0,0,.35)}
 .spin:active:not(:disabled){transform:translateY(4px); box-shadow:0 2px 0 #c98f00}
 .spin:disabled{opacity:.65; cursor:default}
