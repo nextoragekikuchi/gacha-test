@@ -51,8 +51,8 @@ h1{margin:0; font-size:34px; line-height:1.15; font-style:italic; font-weight:90
 .spin:disabled{opacity:.65; cursor:default}
 details{margin-top:18px; font-size:12px; color:#9cc4e6; text-align:left}
 summary{cursor:pointer; text-align:center}
-.rates{margin:8px auto 0; max-width:240px; display:grid; grid-template-columns:1fr auto; gap:3px 12px}
-.rates b{color:#fff}
+.rates{margin:8px auto 0; max-width:300px; line-height:1.7}
+.notice{margin:12px 0 0; color:#ffd9a0; font-size:14px; line-height:1.6}
 
 /* result card */
 .result{display:none}
@@ -129,7 +129,8 @@ summary{cursor:pointer; text-align:center}
       </svg>
     </div>
     <button class="spin" id="spin" disabled>準備中...</button>
-    <details id="ratesBox" hidden><summary>提供割合</summary><div class="rates" id="rates"></div></details>
+    <p class="notice" id="notice" role="alert"></p>
+    <details id="ratesBox" hidden><summary>抽選のルール</summary><div class="rates" id="rates"></div></details>
   </section>
 
   <section class="result" id="result" aria-live="polite">
@@ -161,8 +162,10 @@ summary{cursor:pointer; text-align:center}
 <script>
 /* ===== 設定(ここだけ編集すれば景品を変えられます) ===== */
 const LIFF_ID    = "2012132198-SbUNYmJT";
-const DEBUG      = true;    // 本番公開前に false にする
-const SHOW_RATES = true;    // 提供割合を画面に表示する
+const SPIN_URL   = "https://gfxwexcxvbganfulcqbg.supabase.co/functions/v1/hyper-endpoint";
+const RATE_NOTE  = "各回、先着80名の抽選枠に、SRが1名、Rが5名含まれます。枠を過ぎた場合はNになります。参加には公式アカウントの友だち登録が必要です。";
+const DEBUG      = true;    // 本番公開前に false にする(#preview での確認用です)
+const SHOW_RATES = true;    // 抽選のルールを画面に表示する
 /* rarity: SSR / SR / R / N     art: camera / sd / cf   img: 自社の画像URL(指定すると art より優先) */
 const PRIZES = [
   { rarity:"SSR", name:"景品A(仮)", weight:1,  win:true, art:"camera", img:"" },
@@ -194,9 +197,30 @@ function store(key, val){
 const KEY = () => "gacha:" + userId;
 
 /* --- 抽選: 今は端末内の仮処理。次の段階でサーバーのAPIに置き換えます --- */
+function errorText(e){
+  const m = e && e.message;
+  if(m === "not_friend") return "このガチャは、公式アカウントの友だち登録が必要です。友だち追加してから、もう一度ボタンを押してください。";
+  if(m === "no_active_session") return "ただいま抽選を受け付けていません。スタッフにお声がけください。";
+  return "通信がうまくいきませんでした。電波のよい場所で、もう一度お試しください。";
+}
+
 async function getResult(){
+  if(!PREVIEW){
+    const token = liff.getIDToken();
+    if(!token){ liff.login(); throw new Error("login"); }
+    const r = await fetch(SPIN_URL, {
+      method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify({ idToken:token })
+    });
+    const data = await r.json().catch(() => ({}));
+    if(!r.ok) throw new Error(data.error || "server_error");
+    return { rarity:data.rarity, name:data.name, win:true, art:data.art, img:"", redeemed:!!data.redeemed };
+  }
+  return dummyResult();
+}
+
+async function dummyResult(){
   const saved = store(KEY());
-  if(saved) return saved;                          // 1人1回(仮)
+  if(saved) return saved;                          // 1人1回(仮・#preview用)
   const total = PRIZES.reduce((s,p) => s + p.weight, 0);
   let r = Math.random() * total, picked = PRIZES[PRIZES.length - 1];
   for(const p of PRIZES){ if((r -= p.weight) < 0){ picked = p; break; } }
@@ -207,9 +231,7 @@ async function getResult(){
 
 function showRates(){
   if(!SHOW_RATES) return;
-  const total = PRIZES.reduce((s,p) => s + p.weight, 0);
-  $("rates").innerHTML = PRIZES.map((p) =>
-    "<span><b>" + p.rarity + "</b> " + p.name + "</span><span>" + (p.weight / total * 100).toFixed(1) + "%</span>").join("");
+  $("rates").textContent = RATE_NOTE;
   $("ratesBox").hidden = false;
 }
 
@@ -235,10 +257,13 @@ const tick = () => { $("clock").textContent = new Date().toLocaleTimeString("ja-
 tick(); setInterval(tick, 1000);
 
 async function spin(){
-  $("spin").disabled = true;
+  const btn = $("spin"); btn.disabled = true; $("notice").textContent = "";
+  if(!PREVIEW){ try{ await liff.requestFriendship(); }catch(e){} }   // 友だち追加の案内(友だちなら自動で閉じる)
   const lens = $("lens");
   lens.classList.add("charge");
-  const [res] = await Promise.all([getResult(), wait(1800)]);
+  let res;
+  try{ [res] = await Promise.all([getResult(), wait(1800)]); }
+  catch(e){ lens.classList.remove("charge"); $("notice").textContent = errorText(e); btn.disabled = false; return; }
   lens.dataset.r = res.rarity;          // ここで光の色がレア度の色に変わる
   lens.classList.add("open");
   await wait(650);
@@ -286,7 +311,7 @@ async function main(){
       return;
     }
   }
-  const saved = store(KEY());
+  const saved = PREVIEW ? store(KEY()) : null;
   if(saved){ showResult(saved, false); return; }   // 2回目以降は同じ結果を表示
   $("spin").textContent = "ガチャを回す"; $("spin").disabled = false;
   $("spin").onclick = spin;
