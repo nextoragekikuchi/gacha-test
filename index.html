@@ -197,21 +197,39 @@ function store(key, val){
 const KEY = () => "gacha:" + userId;
 
 /* --- 抽選: 今は端末内の仮処理。次の段階でサーバーのAPIに置き換えます --- */
+/* IDトークンの有効期限は1時間。切れたまま放置された画面は、ログインし直して新しいものにする */
+function idTokenExpired(){
+  try{ const d = liff.getDecodedIDToken(); return !d || d.exp * 1000 < Date.now() + 30000; }
+  catch(e){ return true; }
+}
+function refreshLogin(){            // 戻り値: 再読み込みを始めたら true(1回だけ試す)
+  try{
+    if(sessionStorage.getItem("relogin")){ sessionStorage.removeItem("relogin"); return false; }
+    sessionStorage.setItem("relogin", "1");
+  }catch(e){ return false; }
+  try{ liff.logout(); }catch(e){}
+  location.reload();
+  return true;
+}
+
 function errorText(e){
   const m = e && e.message;
+  if(m === "token_expired") return "有効期限が切れました。LINEの画面をいったん閉じて、もう一度QRコードを読み取ってください。";
   if(m === "not_friend") return "このガチャは、公式アカウントの友だち登録が必要です。友だち追加してから、もう一度ボタンを押してください。";
   if(m === "no_active_session") return "ただいま抽選を受け付けていません。スタッフにお声がけください。";
-  return "通信がうまくいきませんでした。電波のよい場所で、もう一度お試しください。";
+  return "通信がうまくいきませんでした。電波のよい場所で、もう一度お試しください。" + (DEBUG ? "(確認用: " + m + ")" : "");
 }
 
 async function getResult(){
   if(!PREVIEW){
+    if(idTokenExpired()){ if(refreshLogin()) await new Promise(() => {}); throw new Error("token_expired"); }
     const token = liff.getIDToken();
     if(!token){ liff.login(); throw new Error("login"); }
     const r = await fetch(SPIN_URL, {
       method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify({ idToken:token })
     });
     const data = await r.json().catch(() => ({}));
+    if(data.error === "token_expired" && refreshLogin()) await new Promise(() => {});
     if(!r.ok) throw new Error(data.error || "server_error");
     return { rarity:data.rarity, name:data.name, win:true, art:data.art, img:"", redeemed:!!data.redeemed };
   }
@@ -304,6 +322,8 @@ async function main(){
     try{
       await liff.init({ liffId: LIFF_ID });
       if(!liff.isLoggedIn()){ liff.login(); return; }
+      if(idTokenExpired()){ if(refreshLogin()) return; }
+      else { try{ sessionStorage.removeItem("relogin"); }catch(e){} }
       const p = await liff.getProfile();
       userId = p.userId; $("who").textContent = p.displayName + " さん";
     }catch(e){
