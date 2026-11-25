@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>ガチャ スタッフ用</title>
+<style>
+:root{--navy:#0b2f5c; --blue:#0077c8; --ink:#12263a; --mute:#5b7086; --line:#d5e0ea; --ok:#1f9d68}
+*{box-sizing:border-box}
+body{margin:0; background:#eef4fa; color:var(--ink); font-family:"Hiragino Sans","Noto Sans JP","Yu Gothic",Meiryo,sans-serif}
+main{max-width:480px; margin:0 auto; padding:18px 16px 40px}
+h1{font-size:20px; margin:0 0 14px}
+h2{font-size:15px; margin:22px 0 8px; color:var(--mute)}
+input,button{font:inherit}
+input{width:100%; padding:14px; border:1px solid var(--line); border-radius:10px; margin-bottom:10px; font-size:16px}
+button{cursor:pointer}
+.go{width:100%; padding:14px; border:0; border-radius:10px; background:var(--blue); color:#fff; font-weight:700; font-size:16px}
+.card{background:#fff; border-radius:14px; padding:16px; margin-bottom:12px; box-shadow:0 1px 3px rgba(11,47,92,.12)}
+.lab{font-size:12px; color:var(--mute)}
+.big{font-size:26px; font-weight:800; color:var(--navy)}
+.row{display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px solid #edf2f7}
+.row:last-child{border-bottom:0}
+.row b{font-variant-numeric:tabular-nums}
+#list{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+#list button{padding:14px 8px; border:2px solid var(--line); border-radius:10px; background:#fff; font-weight:700}
+#list button.on{border-color:var(--ok); background:#e3f6ee; color:var(--ok)}
+.err{color:#c0392b; min-height:20px; font-size:14px}
+.small{font-size:12px; color:var(--mute)}
+</style>
+</head>
+<body>
+<main>
+  <h1>ガチャ スタッフ用</h1>
+
+  <section id="login">
+    <input id="pin" type="password" placeholder="合言葉(PIN)" autocomplete="off">
+    <button class="go" id="go">開く</button>
+    <p class="err" id="err"></p>
+  </section>
+
+  <section id="panel" hidden>
+    <div class="card"><div class="lab">現在の回</div><div class="big" id="cur"></div></div>
+    <div class="card" id="stats"></div>
+    <h2>回を切り替える(セミナーの開始前に押す)</h2>
+    <div id="list"></div>
+    <p class="small" id="upd"></p>
+  </section>
+</main>
+
+<script>
+const API = "https://gfxwexcxvbganfulcqbg.supabase.co/functions/v1/hyper-endpoint";
+let PIN = "";
+const $ = (id) => document.getElementById(id);
+
+async function call(action, extra){
+  const r = await fetch(API, { method:"POST", headers:{ "Content-Type":"application/json" },
+    body:JSON.stringify(Object.assign({ action, pin:PIN }, extra || {})) });
+  const d = await r.json().catch(() => ({}));
+  if(!r.ok) throw new Error(d.error || "error");
+  return d;
+}
+
+function row(label, value){
+  const d = document.createElement("div"); d.className = "row";
+  const a = document.createElement("span"); a.textContent = label;
+  const b = document.createElement("b"); b.textContent = value;
+  d.append(a, b); return d;
+}
+
+function render(d){
+  const a = d.active;
+  $("cur").textContent = a ? a.name : "未設定";
+  const st = $("stats"); st.replaceChildren();
+  if(a){
+    st.append(
+      row("引いた人数", a.total + "人"),
+      row("抽選枠の残り", Math.max(0, a.pool_size - a.total) + " / " + a.pool_size),
+      row("SR", a.sr_out + " / " + a.sr + "個"),
+      row("R", a.r_out + " / " + a.r + "個"),
+      row("N", a.n_out + "個"),
+      row("受け取り済み", a.redeemed + " / " + a.total + "人")
+    );
+  } else { st.textContent = "現在の回が選ばれていません。"; }
+  const list = $("list"); list.replaceChildren();
+  for(const s of d.sessions){
+    const b = document.createElement("button");
+    b.textContent = s.name; if(s.is_active) b.className = "on";
+    b.onclick = async () => {
+      if(s.is_active || !confirm(s.name + " に切り替えますか?")) return;
+      try{ render(await call("staff_set_session", { sessionId:s.id })); }
+      catch(e){ $("upd").textContent = "切り替えに失敗しました。もう一度お試しください。"; }
+    };
+    list.append(b);
+  }
+  $("upd").textContent = "更新: " + new Date().toLocaleTimeString("ja-JP") + "(10秒ごとに自動更新)";
+}
+
+async function refresh(){
+  try{ render(await call("staff_status")); }
+  catch(e){ $("upd").textContent = "更新できませんでした。電波を確認してください。"; }
+}
+
+$("go").onclick = async () => {
+  PIN = $("pin").value; $("err").textContent = "";
+  try{
+    render(await call("staff_status"));
+    $("login").hidden = true; $("panel").hidden = false;
+    setInterval(refresh, 10000);
+  }catch(e){
+    $("err").textContent = e.message === "bad_pin" ? "合言葉が違います。" : "接続できませんでした。";
+  }
+};
+</script>
+</body>
+</html>

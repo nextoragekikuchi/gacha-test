@@ -83,6 +83,11 @@ summary{cursor:pointer; text-align:center}
 .redeem::before{content:""; position:absolute; inset:0; width:0; background:var(--blue); transition:width .15s linear}
 .redeem.holding::before{width:100%; transition:width 1.2s linear}
 .redeem-help{margin:10px 0 0; font-size:12px; color:var(--mute)}
+.confirm[hidden]{display:none}
+.confirm{margin-top:12px; padding:12px; border-radius:12px; background:#fff4dc}
+.confirm p{margin:0 0 10px; font-weight:800}
+.confirm button{width:100%; margin-top:8px; padding:14px; border-radius:10px; border:0; font-weight:700; font-size:15px}
+#yes{background:var(--ok); color:#fff} #no{background:#e6edf4; color:var(--ink)}
 .done{display:none; margin:0; padding:14px; border-radius:12px; background:#e3f6ee; color:var(--ok); font-weight:800; font-size:18px}
 .result.redeemed .redeem,.result.redeemed .redeem-help{display:none}
 .result.redeemed .done{display:block}
@@ -147,8 +152,9 @@ summary{cursor:pointer; text-align:center}
     <p class="msg" id="msg"></p>
     <div class="panel">
       <p class="clock" id="clock"></p>
-      <button class="redeem" id="redeem"><span>スタッフが長押しして引き換え</span></button>
-      <p class="redeem-help">景品をお渡しするとき、スタッフがこのボタンを長押しします。</p>
+      <button class="redeem" id="redeem"><span>景品を受け取ったら押してください</span></button>
+      <p class="redeem-help">スタッフに画面を見せて、景品を受け取ってから押します。押したあとは取り消せません。</p>
+      <div class="confirm" id="confirm" hidden><p>景品を受け取りましたか?</p><button id="yes">はい、受け取りました</button><button id="no">まだ</button></div>
       <p class="done">引き換え済み</p>
     </div>
   </section>
@@ -290,21 +296,27 @@ async function spin(){
   showResult(res, true);
 }
 
-/* スタッフ用: 1.2秒の長押しで「引き換え済み」にする */
+/* 参加者が自分で「受け取り済み」にする(スタッフの操作は不要) */
 function setupRedeem(){
-  const b = $("redeem"); let timer = null;
-  const start = (e) => {
-    e.preventDefault(); b.classList.add("holding");
-    timer = setTimeout(() => {
-      const res = store(KEY()) || {};
-      res.redeemed = true; store(KEY(), res);
-      $("result").classList.add("redeemed");
-    }, 1200);
+  $("redeem").onclick = () => { $("confirm").hidden = false; };
+  $("no").onclick = () => { $("confirm").hidden = true; };
+  $("yes").onclick = async () => {
+    $("yes").disabled = true;
+    try{
+      if(PREVIEW){ const res = store(KEY()) || {}; res.redeemed = true; store(KEY(), res); }
+      else{
+        if(idTokenExpired()) throw new Error("token_expired");
+        const r = await fetch(SPIN_URL, { method:"POST", headers:{ "Content-Type":"application/json" },
+          body:JSON.stringify({ action:"redeem", idToken:liff.getIDToken() }) });
+        if(!r.ok) throw new Error("redeem_failed");
+      }
+      $("confirm").hidden = true; $("result").classList.add("redeemed");
+    }catch(e){
+      $("confirm").hidden = true;
+      $("msg").textContent = "記録に失敗しました。もう一度お試しください。";
+    }
+    $("yes").disabled = false;
   };
-  const stop = () => { clearTimeout(timer); b.classList.remove("holding"); };
-  b.addEventListener("pointerdown", start);
-  ["pointerup","pointerleave","pointercancel"].forEach((ev) => b.addEventListener(ev, stop));
-  b.addEventListener("contextmenu", (e) => e.preventDefault());
 }
 
 function fail(html){
