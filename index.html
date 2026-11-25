@@ -382,6 +382,8 @@ function fail(html){
   $("err").innerHTML = html; $("err").style.display = "block";
 }
 
+const step = (t) => { if(DEBUG && $("spin").disabled) $("spin").textContent = "準備中(" + t + ")..."; };   // 確認用: どこで止まっているか表示
+
 async function main(){
   setupRedeem(); showRates();
   $("friendBtn").onclick = async () => {
@@ -394,10 +396,13 @@ async function main(){
   }
   if(!PREVIEW){
     try{
+      step("1 初期化");
       await liff.init({ liffId: LIFF_ID });
-      if(!liff.isLoggedIn()){ liff.login(); return; }
-      if(idTokenExpired()){ if(refreshLogin()) return; }
+      step("2 ログイン確認");
+      if(!liff.isLoggedIn()){ step("ログイン画面へ"); liff.login(); return; }
+      if(idTokenExpired()){ step("期限切れ→再ログイン"); if(refreshLogin()) return; }
       else { try{ sessionStorage.removeItem("relogin"); }catch(e){} }
+      step("3 本人情報");
       const p = await liff.getProfile();
       userId = p.userId; $("who").textContent = p.displayName + " さん";
     }catch(e){
@@ -405,6 +410,7 @@ async function main(){
       return;
     }
   }
+  step("4 回の確認");
   const st = await myStatus();
   if(st.drawn){
     if(st.redeemed){ showUsed(st, st.redeemed_at); return; }     // 引き換え済み: 赤い画面
