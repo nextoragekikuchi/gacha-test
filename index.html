@@ -183,11 +183,14 @@ body.is-used{background:#a8201a}
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script>
 /* ===== 設定(ここだけ編集すれば景品を変えられます) ===== */
-const LIFF_ID    = "2012132198-SbUNYmJT";
+const LIFF_IDS   = { dev:"2012132198-SbUNYmJT", review:"2012132199-mz1AFd4q", prod:"2012132200-rhOni19W" };
+const ENV_MATCH  = location.search.match(/[?&]env=(dev|review)/);
+const ENV        = ENV_MATCH ? ENV_MATCH[1] : "prod";   // 本番用のエンドポイントURLには ?env= を付けない
+const LIFF_ID    = LIFF_IDS[ENV];
 const SPIN_URL   = "https://gfxwexcxvbganfulcqbg.supabase.co/functions/v1/hyper-endpoint";
 const FRIEND_URL = "https://line.me/R/ti/p/%40856psjif";   // 公式アカウントの友だち追加ページ
 const RATE_NOTE  = "各回、先着80名の抽選枠に、SRが1名、Rが5名含まれます。枠を過ぎた場合はNになります。参加には公式アカウントの友だち登録が必要です。";
-const DEBUG      = true;    // 本番公開前に false にする(#preview での確認用です)
+const DEBUG      = ENV === "dev" || location.hash === "#preview";   // テスト用の表示は、開発用と #preview のときだけ
 const SHOW_RATES = true;    // 抽選のルールを画面に表示する
 /* rarity: SSR / SR / R / N     art: camera / sd / cf   img: 自社の画像URL(指定すると art より優先) */
 const PRIZES = [
