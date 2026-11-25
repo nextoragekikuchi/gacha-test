@@ -52,6 +52,8 @@ h1{margin:0; font-size:34px; line-height:1.15; font-style:italic; font-weight:90
 details{margin-top:18px; font-size:12px; color:#9cc4e6; text-align:left}
 summary{cursor:pointer; text-align:center}
 .rates{margin:8px auto 0; max-width:300px; line-height:1.7}
+.friend{display:block; width:100%; margin-top:12px; padding:16px; border:0; border-radius:14px; background:#06c755; color:#fff; font-size:18px; font-weight:800}
+.friend[hidden]{display:none}
 .notice{margin:12px 0 0; color:#ffd9a0; font-size:14px; line-height:1.6}
 
 /* result card */
@@ -141,6 +143,7 @@ body.is-used{background:#a8201a}
     </div>
     <button class="spin" id="spin" disabled>準備中...</button>
     <p class="notice" id="notice" role="alert"></p>
+    <button class="friend" id="friendBtn" hidden>友だち追加する</button>
     <details id="ratesBox" hidden><summary>抽選のルール</summary><div class="rates" id="rates"></div></details>
   </section>
 
@@ -182,6 +185,7 @@ body.is-used{background:#a8201a}
 /* ===== 設定(ここだけ編集すれば景品を変えられます) ===== */
 const LIFF_ID    = "2012132198-SbUNYmJT";
 const SPIN_URL   = "https://gfxwexcxvbganfulcqbg.supabase.co/functions/v1/hyper-endpoint";
+const FRIEND_URL = "https://line.me/R/ti/p/%40856psjif";   // 公式アカウントの友だち追加ページ
 const RATE_NOTE  = "各回、先着80名の抽選枠に、SRが1名、Rが5名含まれます。枠を過ぎた場合はNになります。参加には公式アカウントの友だち登録が必要です。";
 const DEBUG      = true;    // 本番公開前に false にする(#preview での確認用です)
 const SHOW_RATES = true;    // 抽選のルールを画面に表示する
@@ -326,13 +330,17 @@ const tick = () => { $("clock").textContent = new Date().toLocaleTimeString("ja-
 tick(); setInterval(tick, 1000);
 
 async function spin(){
-  const btn = $("spin"); btn.disabled = true; $("notice").textContent = "";
+  const btn = $("spin"); btn.disabled = true; $("notice").textContent = ""; $("friendBtn").hidden = true;
   if(!PREVIEW){ try{ await liff.requestFriendship(); }catch(e){} }   // 友だち追加の案内(友だちなら自動で閉じる)
   const lens = $("lens");
   lens.classList.add("charge");
   let res;
   try{ [res] = await Promise.all([getResult(), wait(1800)]); }
-  catch(e){ lens.classList.remove("charge"); $("notice").textContent = errorText(e); btn.disabled = false; return; }
+  catch(e){
+    lens.classList.remove("charge"); $("notice").textContent = errorText(e);
+    $("friendBtn").hidden = (e.message !== "not_friend");   // 友だちでないときだけ、追加ボタンを出す
+    btn.disabled = false; return;
+  }
   if(res.already){                      // 念のため: すでに引いていた場合は演出せずに切り替える
     lens.classList.remove("charge");
     if(res.redeemed){ showUsed(res); } else { showResult(res, false); }
@@ -376,6 +384,10 @@ function fail(html){
 
 async function main(){
   setupRedeem(); showRates();
+  $("friendBtn").onclick = async () => {
+    try{ await liff.requestFriendship(); }
+    catch(e){ try{ liff.openWindow({ url:FRIEND_URL, external:false }); }catch(_){} }
+  };
   if(DEBUG){
     $("debug").hidden = false;
     $("reset").onclick = () => { store(KEY(), null); location.reload(); };
