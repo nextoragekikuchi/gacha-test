@@ -99,6 +99,12 @@ summary{cursor:pointer; text-align:center}
 .err{display:none; background:#fff; color:var(--ink); border-radius:16px; padding:22px; line-height:1.7; text-align:left}
 .debug{margin-top:22px; font-size:12px}
 .debug button{background:none; border:0; color:#8fb1cf; text-decoration:underline; padding:6px}
+.valid{display:inline-block; margin:0 0 12px; padding:6px 16px; border-radius:999px; background:var(--ok); color:#fff; font-weight:800; font-size:15px}
+body.is-used{background:#a8201a}
+.used{padding-top:8vh}
+.used-mark{margin:0 0 22px; padding:18px 10px; border:5px solid #fff; border-radius:16px; font-size:46px; font-weight:900; letter-spacing:.04em}
+.used-msg{margin:0 0 22px; font-size:19px; font-weight:700; line-height:1.7}
+.used-info{margin:0; font-size:14px; color:#ffd9d6; white-space:pre-line}
 @media (prefers-reduced-motion:reduce){
   .lens.charge .rays,.lens.charge .rot,.lens.charge .halo,.card[data-r] .front::after{animation:none}
   .card,.blade{transition:none}
@@ -139,6 +145,7 @@ summary{cursor:pointer; text-align:center}
   </section>
 
   <section class="result" id="result" aria-live="polite">
+    <p class="valid">● 未受け取り(有効)</p>
     <div class="card-wrap">
       <div class="card" id="card">
         <div class="face back">Nextorage</div>
@@ -157,6 +164,12 @@ summary{cursor:pointer; text-align:center}
       <div class="confirm" id="confirm" hidden><p>景品を受け取りましたか?</p><button id="yes">はい、受け取りました</button><button id="no">まだ</button></div>
       <p class="done">引き換え済み</p>
     </div>
+  </section>
+
+  <section class="used" id="used" hidden>
+    <p class="used-mark">引き換え済み</p>
+    <p class="used-msg">既に景品と引き換え済みです。<br>また次の回にお越しください。</p>
+    <p class="used-info" id="usedInfo"></p>
   </section>
 
   <section class="err" id="err"></section>
@@ -192,6 +205,7 @@ const $ = (id) => document.getElementById(id);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const PREVIEW = location.hash === "#preview";   // LINE外でデザイン確認するとき用
 let userId = "guest";
+let current = null;   // いま表示している結果
 
 function store(key, val){
   try{
@@ -218,6 +232,36 @@ function refreshLogin(){            // 戻り値: 再読み込みを始めたら
   return true;
 }
 
+/* 引き換え済みの全面表示(赤い画面) */
+function showUsed(res, when){
+  $("stage").style.display = "none";
+  $("result").classList.remove("show");
+  $("used").hidden = false;
+  document.body.classList.add("is-used");
+  let t = "";
+  if(res && res.name) t += "景品: " + res.name;
+  if(when){
+    const d = new Date(when);
+    if(!isNaN(d)) t += (t ? "\n" : "") + "受け取り: " + d.toLocaleTimeString("ja-JP", { hour:"2-digit", minute:"2-digit" });
+  }
+  $("usedInfo").textContent = t;
+}
+
+/* 開いた時点で、この回にすでに引いたかをサーバーに聞く(抽選はしない) */
+async function myStatus(){
+  if(PREVIEW){
+    const sv = store(KEY());
+    return sv ? { drawn:true, rarity:sv.rarity, name:sv.name, art:sv.art, redeemed:!!sv.redeemed } : { drawn:false };
+  }
+  try{
+    if(idTokenExpired()) return { drawn:false };
+    const r = await fetch(SPIN_URL, { method:"POST", headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({ action:"status", idToken:liff.getIDToken() }) });
+    if(!r.ok) return { drawn:false };
+    return await r.json();
+  }catch(e){ return { drawn:false }; }
+}
+
 function errorText(e){
   const m = e && e.message;
   if(m === "token_expired") return "有効期限が切れました。LINEの画面をいったん閉じて、もう一度QRコードを読み取ってください。";
@@ -237,7 +281,7 @@ async function getResult(){
     const data = await r.json().catch(() => ({}));
     if(data.error === "token_expired" && refreshLogin()) await new Promise(() => {});
     if(!r.ok) throw new Error(data.error || "server_error");
-    return { rarity:data.rarity, name:data.name, win:true, art:data.art, img:"", redeemed:!!data.redeemed };
+    return { rarity:data.rarity, name:data.name, win:true, art:data.art, img:"", redeemed:!!data.redeemed, already:!!data.already };
   }
   return dummyResult();
 }
@@ -260,6 +304,7 @@ function showRates(){
 }
 
 function showResult(res, animate){
+  current = res;
   $("stage").style.display = "none";
   const card = $("card");
   card.dataset.r = res.rarity;
@@ -288,6 +333,11 @@ async function spin(){
   let res;
   try{ [res] = await Promise.all([getResult(), wait(1800)]); }
   catch(e){ lens.classList.remove("charge"); $("notice").textContent = errorText(e); btn.disabled = false; return; }
+  if(res.already){                      // 念のため: すでに引いていた場合は演出せずに切り替える
+    lens.classList.remove("charge");
+    if(res.redeemed){ showUsed(res); } else { showResult(res, false); }
+    return;
+  }
   lens.dataset.r = res.rarity;          // ここで光の色がレア度の色に変わる
   lens.classList.add("open");
   await wait(650);
@@ -310,7 +360,7 @@ function setupRedeem(){
           body:JSON.stringify({ action:"redeem", idToken:liff.getIDToken() }) });
         if(!r.ok) throw new Error("redeem_failed");
       }
-      $("confirm").hidden = true; $("result").classList.add("redeemed");
+      $("confirm").hidden = true; showUsed(current, new Date());
     }catch(e){
       $("confirm").hidden = true;
       $("msg").textContent = "記録に失敗しました。もう一度お試しください。";
@@ -343,8 +393,12 @@ async function main(){
       return;
     }
   }
-  const saved = PREVIEW ? store(KEY()) : null;
-  if(saved){ showResult(saved, false); return; }   // 2回目以降は同じ結果を表示
+  const st = await myStatus();
+  if(st.drawn){
+    if(st.redeemed){ showUsed(st, st.redeemed_at); return; }     // 引き換え済み: 赤い画面
+    showResult({ rarity:st.rarity, name:st.name, win:true, art:st.art, img:"", redeemed:false }, false);   // 未受け取り: 演出なしでカード
+    return;
+  }   // 2回目以降は同じ結果を表示
   $("spin").textContent = "ガチャを回す"; $("spin").disabled = false;
   $("spin").onclick = spin;
 }
