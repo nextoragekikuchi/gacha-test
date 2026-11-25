@@ -71,7 +71,7 @@ summary{cursor:pointer; text-align:center}
 .stars{font-size:15px; letter-spacing:1px}
 .art{flex:1; display:flex; align-items:center; justify-content:center; padding:14px;
   background:radial-gradient(circle,#fff 0,#dcecf9 70%)}
-.art svg,.art img{max-width:86%; max-height:100%; filter:drop-shadow(0 6px 6px rgba(11,47,92,.3))}
+.art svg,.art img{max-width:86%; max-height:200px; object-fit:contain; filter:drop-shadow(0 6px 6px rgba(11,47,92,.3))}
 .pname{padding:12px 10px 16px; font-size:20px; font-weight:900; line-height:1.3}
 .card[data-r=SSR] .front::after,.card[data-r=SR] .front::after{content:""; position:absolute; inset:0;
   background:linear-gradient(115deg,transparent 40%,rgba(255,255,255,.75) 50%,transparent 60%); transform:translateX(-120%); animation:shine 1.4s .9s ease-out forwards}
@@ -285,7 +285,7 @@ async function getResult(){
     const data = await r.json().catch(() => ({}));
     if(data.error === "token_expired" && refreshLogin()) await new Promise(() => {});
     if(!r.ok) throw new Error(data.error || "server_error");
-    return { rarity:data.rarity, name:data.name, win:true, art:data.art, img:"", redeemed:!!data.redeemed, already:!!data.already };
+    return { rarity:data.rarity, name:data.name, win:true, art:data.art, img:data.img || "", redeemed:!!data.redeemed, already:!!data.already };
   }
   return dummyResult();
 }
@@ -414,7 +414,7 @@ async function main(){
   const st = await myStatus();
   if(st.drawn){
     if(st.redeemed){ showUsed(st, st.redeemed_at); return; }     // 引き換え済み: 赤い画面
-    showResult({ rarity:st.rarity, name:st.name, win:true, art:st.art, img:"", redeemed:false }, false);   // 未受け取り: 演出なしでカード
+    showResult({ rarity:st.rarity, name:st.name, win:true, art:st.art, img:st.img || "", redeemed:false }, false);   // 未受け取り: 演出なしでカード
     return;
   }   // 2回目以降は同じ結果を表示
   $("spin").textContent = "ガチャを回す"; $("spin").disabled = false;
