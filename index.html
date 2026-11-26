@@ -54,6 +54,8 @@ summary{cursor:pointer; text-align:center}
 .rates{margin:8px auto 0; max-width:300px; line-height:1.7}
 .friend{display:block; width:100%; margin-top:12px; padding:16px; border:0; border-radius:14px; background:#06c755; color:#fff; font-size:18px; font-weight:800}
 .friend[hidden]{display:none}
+.reload{display:block; width:100%; margin-top:12px; padding:14px; border:0; border-radius:14px; background:#e6edf4; color:#12263a; font-size:16px; font-weight:700}
+.reload[hidden]{display:none}
 .notice{margin:12px 0 0; color:#ffd9a0; font-size:14px; line-height:1.6}
 
 /* result card */
@@ -144,6 +146,7 @@ body.is-used{background:#a8201a}
     <button class="spin" id="spin" disabled>準備中...</button>
     <p class="notice" id="notice" role="alert"></p>
     <button class="friend" id="friendBtn" hidden>友だち追加する</button>
+    <button class="reload" id="reloadBtn" hidden>読み込み直す</button>
     <details id="ratesBox" hidden><summary>抽選のルール</summary><div class="rates" id="rates"></div></details>
   </section>
 
@@ -381,14 +384,35 @@ function setupRedeem(){
 }
 
 function fail(html){
+  markReady();
   $("stage").style.display = "none";
   $("err").innerHTML = html; $("err").style.display = "block";
 }
 
-const step = (t) => { if(DEBUG && $("spin").disabled) $("spin").textContent = "準備中(" + t + ")..."; };   // 確認用: どこで止まっているか表示
+let lastStep = "起動", ready = false, stallShown = false;
+function markReady(){          // 準備が終わったら、止まったときの案内を消す
+  ready = true;
+  try{ sessionStorage.removeItem("autoReload"); }catch(e){}
+  $("reloadBtn").hidden = true;
+  if(stallShown){ $("notice").textContent = ""; stallShown = false; }
+}
+function watchStall(){         // 準備が終わらないときの案内(初回の許可の確認などで止まった場合)
+  setTimeout(() => {
+    if(ready) return;
+    stallShown = true;
+    $("notice").textContent = "読み込みが終わらないときは、下のボタンを押してください。それでも進まないときは、画面を閉じて、もう一度QRコードを読み取ってください。(状態: " + lastStep + ")";
+    $("reloadBtn").hidden = false;
+  }, 6000);
+  setTimeout(() => {           // 20秒たっても進まないときは、1回だけ自動で読み込み直す
+    if(ready) return;
+    try{ if(!sessionStorage.getItem("autoReload")){ sessionStorage.setItem("autoReload", "1"); location.reload(); } }catch(e){}
+  }, 20000);
+}
+const step = (t) => { lastStep = t; if(DEBUG && $("spin").disabled) $("spin").textContent = "準備中(" + t + ")..."; };   // 確認用: どこで止まっているか表示
 
 async function main(){
-  setupRedeem(); showRates();
+  setupRedeem(); showRates(); watchStall();
+  $("reloadBtn").onclick = () => location.reload();
   $("friendBtn").onclick = async () => {
     try{ await liff.requestFriendship(); }
     catch(e){ try{ liff.openWindow({ url:FRIEND_URL, external:false }); }catch(_){} }
@@ -415,6 +439,7 @@ async function main(){
   }
   step("4 回の確認");
   const st = await myStatus();
+  markReady();
   if(st.drawn){
     if(st.redeemed){ showUsed(st, st.redeemed_at); return; }     // 引き換え済み: 赤い画面
     showResult({ rarity:st.rarity, name:st.name, win:true, art:st.art, img:st.img || "", redeemed:false }, false);   // 未受け取り: 演出なしでカード
